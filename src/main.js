@@ -1,11 +1,36 @@
 import './styles.css'
+import './extra.css'
+import { fleetApi } from './api'
 
-const shipments = [
-  ['FF-260716-018', '浦东新区 → 静安区', '生鲜 12 箱', '配送中', '14:35', 'blue'],
-  ['FF-260716-017', '虹桥 → 徐汇区', '餐饮食材 28 箱', '待接单', '15:10', 'orange'],
-  ['FF-260716-016', '杨浦区 → 宝山区', '电商包裹 86 件', '已签收', '完成', 'green']
+const fallback = [
+  { id: 'FF-260716-018', route: '浦东新区 → 静安区', cargo: '生鲜 12 箱', status: '配送中', eta: '14:35', tone: 'blue' },
+  { id: 'FF-260716-017', route: '虹桥 → 徐汇区', cargo: '餐饮食材 28 箱', status: '待接单', eta: '15:10', tone: 'orange' },
+  { id: 'FF-260716-016', route: '杨浦区 → 宝山区', cargo: '电商包裹 86 件', status: '已完成', eta: '已签收', tone: 'green' }
 ]
 const app = document.querySelector('#app')
-app.innerHTML = `<main class="mobile-shell"><header class="top"><div><p>FLEETFLOW / 2026</p><h1>今天的每一单<br><b>都准时到达</b></h1></div><span class="avatar">许</span></header><section class="hero"><div><span class="eyebrow">配送工作台</span><h2>周师傅，下午好<br>还有 3 单待完成</h2><p>实时同步线路、签收与异常提醒</p></div><div class="hero-orbit">↗</div></section><section class="quick"><button data-action="scan"><b>＋</b><span>扫码接单</span></button><button data-action="route"><b>⌁</b><span>我的路线</span></button><button data-action="sign"><b>✓</b><span>签收记录</span></button></section><section class="section-head"><h3>今日运单 <small>3 单</small></h3><a data-action="all">查看全部 →</a></section><section class="cards">${shipments.map((s, i) => `<article class="shipment ${s[5]}"><div class="card-top"><span class="code">${s[0]}</span><b>${s[3]}</b></div><h4>${s[1]}</h4><p>${s[2]} · 预计 ${s[4]}</p><div class="route"><span>取货点</span><i></i><span>配送中</span><i></i><span>收货点</span></div>${i === 0 ? '<button class="track" data-action="track">查看实时轨迹　↗</button>' : ''}</article>`).join('')}</section><section class="section-head"><h3>异常提醒 <small class="red">1 条</small></h3><a data-action="exception">处理 →</a></section><article class="alert"><span>!</span><div><strong>FF-260716-018 预计晚到 18 分钟</strong><p>高架拥堵，已通知收货人并重新规划路线</p></div></article><nav class="tabbar"><button class="active">⌂<small>工作台</small></button><button data-action="all">▤<small>运单池</small></button><button data-action="route">◎<small>我的路线</small></button><button>◉<small>我的</small></button></nav><div class="toast" hidden></div></main>`
-const toast = document.querySelector('.toast')
-document.querySelectorAll('[data-action]').forEach((el) => el.addEventListener('click', () => { toast.textContent = ({scan:'扫码接单已打开',route:'今日路线已更新',sign:'最近签收记录已加载',all:'运单池正在同步',track:'轨迹已更新至 14:35',exception:'异常详情已打开'})[el.dataset.action] || '操作已完成'; toast.hidden = false; setTimeout(() => { toast.hidden = true }, 1900) }))
+const state = { shipments: fallback, exceptions: [{ id: 'EX-041', shipmentId: fallback[0].id, text: '预计晚到 18 分钟', level: '高' }], live: false, toastTimer: null }
+const tone = (status) => ({ 配送中: 'blue', 待接单: 'orange', 待调度: 'purple', 已送达: 'blue', 已完成: 'green' }[status] || 'orange')
+const nextStatus = (status) => ({ 配送中: '已送达', 已送达: '已完成' }[status] || '')
+function toast(message) { const el = document.querySelector('.toast'); el.textContent = message; el.hidden = false; clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => { el.hidden = true }, 1900) }
+async function load() { try { const [shipments, exceptions] = await Promise.all([fleetApi.shipments(), fleetApi.exceptions()]); state.shipments = shipments.list.map((item) => ({ ...item, tone: tone(item.status) })); state.exceptions = exceptions.list; state.live = true; render(); toast('已同步线上运单') } catch { state.live = false; render() } }
+async function run(action) {
+  try { await action(); await load() } catch (error) { toast(error.message) }
+}
+function card(item) {
+  const action = item.status === '待接单' || item.status === '待调度' ? `<button class="track action" data-action="assign" data-id="${item.id}">扫码接单　→</button>` : item.status === '配送中' || item.status === '已送达' ? `<button class="track action" data-action="advance" data-id="${item.id}">${item.status === '配送中' ? '确认送达　→' : '完成签收　→'}</button>` : '<div class="closed">✓ 已完成闭环</div>'
+  return `<article class="shipment ${item.tone}"><div class="card-top"><span class="code">${item.id}</span><b>${item.status}</b></div><h4>${item.route}</h4><p>${item.cargo} · ${item.eta}</p><div class="route"><span>取货点</span><i></i><span>${item.status}</span><i></i><span>收货点</span></div>${action}</article>`
+}
+function render() {
+  const pending = state.shipments.filter((item) => item.status !== '已完成' && item.status !== '已取消').length
+  const exception = state.exceptions[0]
+  app.innerHTML = `<main class="mobile-shell"><header class="top"><div><p>FLEETFLOW / 2026</p><h1>今天的每一单<br><b>都准时到达</b></h1></div><span class="avatar">许</span></header><section class="hero"><div><span class="eyebrow">配送工作台 · ${state.live ? '线上同步' : '演示模式'}</span><h2>周师傅，下午好<br>还有 ${pending} 单待完成</h2><p>实时同步线路、签收与异常提醒</p></div><div class="hero-orbit">↗</div></section><section class="quick"><button data-action="scan"><b>＋</b><span>扫码接单</span></button><button data-action="route"><b>⌁</b><span>我的路线</span></button><button data-action="sign"><b>✓</b><span>签收记录</span></button></section><section class="section-head"><h3>今日运单 <small>${state.shipments.length} 单</small></h3><a data-action="all">查看全部 →</a></section><section class="cards">${state.shipments.map(card).join('')}</section><section class="section-head"><h3>异常提醒 <small class="red">${state.exceptions.length} 条</small></h3><a data-action="exception">处理 →</a></section>${exception ? `<article class="alert"><span>!</span><div><strong>${exception.shipmentId} ${exception.type || '异常提醒'}</strong><p>${exception.text}</p><button class="alert-action" data-action="resolve" data-id="${exception.id}">标记已处理</button></div></article>` : '<article class="alert empty-alert"><span>✓</span><div><strong>今日异常已全部闭环</strong><p>线路运行正常，继续保持。</p></div></article>'}<nav class="tabbar"><button class="active">⌂<small>工作台</small></button><button data-action="all">▤<small>运单池</small></button><button data-action="route">◎<small>我的路线</small></button><button data-action="sign">◉<small>我的</small></button></nav><div class="toast" hidden></div></main>`
+  document.querySelectorAll('[data-action]').forEach((el) => el.addEventListener('click', () => {
+    const action = el.dataset.action; const item = state.shipments.find((row) => row.id === el.dataset.id)
+    if (action === 'assign' && item) return run(() => fleetApi.assign(item.id, '周师傅'))
+    if (action === 'advance' && item) return run(() => fleetApi.advance(item.id, nextStatus(item.status)))
+    if (action === 'resolve' && el.dataset.id) return run(() => fleetApi.resolveException(el.dataset.id))
+    toast(({ scan: '请点击待接单运单完成扫码接单', route: '今日路线已更新', sign: '签收记录已加载', all: '运单池正在同步', exception: state.exceptions.length ? '请先处理异常' : '暂无待处理异常' })[action] || '操作已完成')
+  }))
+}
+render()
+load()
