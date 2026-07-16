@@ -1,0 +1,11 @@
+import './styles.css'
+
+const shipments = [
+  ['FF-260716-018', '浦东新区 → 静安区', '生鲜 12 箱', '配送中', '14:35', 'blue'],
+  ['FF-260716-017', '虹桥 → 徐汇区', '餐饮食材 28 箱', '待接单', '15:10', 'orange'],
+  ['FF-260716-016', '杨浦区 → 宝山区', '电商包裹 86 件', '已签收', '完成', 'green']
+]
+const app = document.querySelector('#app')
+app.innerHTML = `<main class="mobile-shell"><header class="top"><div><p>FLEETFLOW / 2026</p><h1>今天的每一单<br><b>都准时到达</b></h1></div><span class="avatar">许</span></header><section class="hero"><div><span class="eyebrow">配送工作台</span><h2>周师傅，下午好<br>还有 3 单待完成</h2><p>实时同步线路、签收与异常提醒</p></div><div class="hero-orbit">↗</div></section><section class="quick"><button data-action="scan"><b>＋</b><span>扫码接单</span></button><button data-action="route"><b>⌁</b><span>我的路线</span></button><button data-action="sign"><b>✓</b><span>签收记录</span></button></section><section class="section-head"><h3>今日运单 <small>3 单</small></h3><a data-action="all">查看全部 →</a></section><section class="cards">${shipments.map((s, i) => `<article class="shipment ${s[5]}"><div class="card-top"><span class="code">${s[0]}</span><b>${s[3]}</b></div><h4>${s[1]}</h4><p>${s[2]} · 预计 ${s[4]}</p><div class="route"><span>取货点</span><i></i><span>配送中</span><i></i><span>收货点</span></div>${i === 0 ? '<button class="track" data-action="track">查看实时轨迹　↗</button>' : ''}</article>`).join('')}</section><section class="section-head"><h3>异常提醒 <small class="red">1 条</small></h3><a data-action="exception">处理 →</a></section><article class="alert"><span>!</span><div><strong>FF-260716-018 预计晚到 18 分钟</strong><p>高架拥堵，已通知收货人并重新规划路线</p></div></article><nav class="tabbar"><button class="active">⌂<small>工作台</small></button><button data-action="all">▤<small>运单池</small></button><button data-action="route">◎<small>我的路线</small></button><button>◉<small>我的</small></button></nav><div class="toast" hidden></div></main>`
+const toast = document.querySelector('.toast')
+document.querySelectorAll('[data-action]').forEach((el) => el.addEventListener('click', () => { toast.textContent = ({scan:'扫码接单已打开',route:'今日路线已更新',sign:'最近签收记录已加载',all:'运单池正在同步',track:'轨迹已更新至 14:35',exception:'异常详情已打开'})[el.dataset.action] || '操作已完成'; toast.hidden = false; setTimeout(() => { toast.hidden = true }, 1900) }))
